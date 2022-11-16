@@ -1,81 +1,89 @@
 #install.packages("palmerpenguins") #alternative r test data to iris
 
+# Library Calls 
 library(tidyverse)
-library(palmerpenguins) # For More on Palmer Penguines: https://allisonhorst.github.io/palmerpenguins/
+library(palmerpenguins) # For More on Palmer Penguins: https://allisonhorst.github.io/palmerpenguins/
 library(aws.s3)
 library(janitor)
 
 
-survey_raw <- palmerpenguins::penguins
+#Load the original pamerpenguins directly from the package
+#survey_raw <- palmerpenguins::penguins
 
 
-# AWS 
+# AWS Credentials: Source config information from an external source for security
 access_key_id      <- config::get(config = "redoak-retriever", value =     "access_key_id")
 secret_access_key  <- config::get(config = "redoak-retriever", value = "secret_access_key")
 aws_default_region <- config::get(config = "redoak-retriever", value =    "default_region")
 
+# Set Environmental Variables
 Sys.setenv("AWS_ACCESS_KEY_ID"     =     access_key_id)
 Sys.setenv("AWS_SECRET_ACCESS_KEY" = secret_access_key)
 Sys.setenv("AWS_DEFAULT_REGION"    = aws_default_region)
 
 
 
+# Script Parameters: Better to store all these "decision points" early in the script for easy access and recall
+project_s3_bucket <- "ros-analytics-datalake-test" #Bucket name on AWS
+s3_path_raw_data <- "palmer_penguins.csv" #Object name on AWS
 
-project_s3_bucket <- "ros-analytics-datalake-test"
-s3_path_raw_data <- "palmer_penguins.csv"
 
+# Lets use AWS and our script parameters to load in a csv
 survey_raw <- aws.s3::s3read_using(readr::read_csv,
                                    lazy = FALSE,
                                    object = s3_path_raw_data,
                                    bucket = project_s3_bucket)
 
 
-# Now I didn't do a good job preparing this data and there are some untidy column names and data
+# I didn't do a good job preparing this data at all and there may be some untidy column names and data. 
+# Let's start by cleaning it up with {janitor} and some case_whens 
+
 survey_clean <- survey_raw %>% 
   rename_with(str_to_lower) %>% 
   janitor::clean_names() %>% 
-# na.omit() %>% 
-  filter(! is.na(species)) %>% 
-  mutate(sex = case_when(is.na(sex) ~ "unknown",
-                         TRUE       ~ sex)) %>% 
-  mutate(bill_length_cat = case_when(bill_length_mm > 50 ~ "Long", 
-                                     bill_length_mm > 40 ~ "Medium", 
-                                     TRUE                ~ "Short"))
+  na.omit() #%>% 
+  # filter(! is.na(species)) %>% 
+  # mutate(sex = case_when(is.na(sex) ~ "unknown",
+  #                        TRUE       ~ sex)) %>% 
+  # mutate(bill_length_cat = case_when(bill_length_mm > 50 ~ "Long", 
+  #                                    bill_length_mm > 40 ~ "Medium", 
+  #                                    TRUE                ~ "Short"))
 
+# Glimpse is incredibly useful and can be used on arrow and dbplyr objects too!
 glimpse(survey_clean)
 
-
+# Tabyl is the easiest eda function around
 survey_clean %>% 
   janitor::tabyl(year)
 
 
-survey_long <- survey_clean %>% 
+survey_summary <- survey_clean %>% 
   group_by(species, island, sex) %>% 
   summarise(bill_length    = round_half_up(mean(bill_length_mm,    na.rm = TRUE), digits = 2),
             bill_depth     = round_half_up(mean(bill_depth_mm,     na.rm = TRUE), digits = 2),
             flipper_length = round_half_up(mean(flipper_length_mm, na.rm = TRUE), digits = 2)) %>% 
   mutate(sex = str_to_title(sex))
 
-survey_long %>% 
+survey_summary %>% 
   select(-species) %>% 
   kableExtra::kbl(co.names = c("Species", "Island", "Sex", "Bill length", "Bill Depth", "Flipper Length")) %>% 
   kable_classic_2()
 
 
-index <- survey_long %>% 
+index <- survey_summary %>% 
   group_by(species) %>% 
   count() %>% 
   deframe()
 
 
-survey_long %>% 
+survey_summary %>% 
   select(-species) %>% 
   arrange(desc(bill_length)) %>% 
   kableExtra::kbl(co.names = c("Island", "Sex", "Bill length", "Bill Depth", "Flipper Length")) %>% 
   kable_classic_2() %>% 
   group_rows(group_label = "Species", index = index) %>% 
   row_spec(0, bold = TRUE) %>% 
-  column_spec(4, background = spec_color(survey_long$bill_length, end = 0.7), color = "white", bold = TRUE) %>% 
+  column_spec(4, background = spec_color(survey_summary$bill_length, end = 0.7), color = "white", bold = TRUE) %>% 
   add_header_above(c("Groupings" = 3, "Average Feature Values" = 3)) %>% 
   add_header_above(c("Palmer's Penguins" = 6), bold = TRUE) %>% 
   footnote(general = "Values in MM")
@@ -88,7 +96,7 @@ survey_long %>%
 
 
 
-
+# Databases in R ----------------------------------------------------------
 
 
 # Redshift Database
@@ -111,6 +119,9 @@ survey_long %>%
 #     bigint    = "numeric")
 
 
+
+
+# Parameterized R Markdown ------------------------------------------------
 
 
 
@@ -214,6 +225,7 @@ slackr::slackr_msg(txt = paste0("Crosstabs Doc Uploaded to S3: ", output_file, "
 }
 
 
+# Example Render Use
 build_crosstab_doc(
   output_dir = output_dir,
   output_file = paste0(project_name, " Survey Crosstabs.pdf"),
