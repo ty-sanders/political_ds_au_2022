@@ -1,8 +1,27 @@
-#install.packages("palmerpenguins") #alternative r test data to iris
+### R in Production 
+### Tyler Sanders | ty.sanders1997@gmail.com | https://www.linkedin.com/in/tyler-sanders-8275b5150/
+### https://github.com/ty-sanders/political_ds_au_2022
+
+## People you should follow on the internet (twitter or whatever comes after twitter)
+# Hadley 
+# Julia Silge
+# Jenny Bryan
+# Thomas Mock
+# Thomas Lin Pederson
+# Cara Thompson
+# Emily Riederer
+# Kyle Ciulla
+# Matt Worthington
+# David Keyes
+# Asmae Toumi
+# Kyle Walker
+# David Robinson 
+
 
 # Library Calls 
-library(tidyverse)
+#install.packages("palmerpenguins") #alternative r test data to iris
 library(palmerpenguins) # For More on Palmer Penguins: https://allisonhorst.github.io/palmerpenguins/
+library(tidyverse)
 library(aws.s3)
 library(janitor)
 
@@ -122,7 +141,7 @@ survey_summary %>%
 
 
 # Parameterized R Markdown ------------------------------------------------
-
+# https://www.youtube.com/watch?v=WkF7nqEYF1E
 
 
 # Example Render Command
