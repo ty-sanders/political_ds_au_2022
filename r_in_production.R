@@ -24,8 +24,8 @@ library(palmerpenguins) # For More on Palmer Penguins: https://allisonhorst.gith
 library(tidyverse)
 library(aws.s3)
 library(janitor)
-
-
+library(kableExtra)
+library(redshiftTools)
 #Load the original pamerpenguins directly from the package
 #survey_raw <- palmerpenguins::penguins
 
@@ -53,6 +53,19 @@ survey_raw <- aws.s3::s3read_using(readr::read_csv,
                                    object = s3_path_raw_data,
                                    bucket = project_s3_bucket)
 
+rs_copy_query <- glue::glue(
+  "COPY voters.abev_national_clean
+     FROM 's3://ros-automated-redshift/{file_name}'
+     CREDENTIALS
+     'aws_access_key_id={Sys.getenv('AWS_ACCESS_KEY_ID')};aws_secret_access_key={Sys.getenv('AWS_SECRET_ACCESS_KEY')}'
+     fillrecord 
+     trimblanks
+     truncatecolumns
+     delimiter ','
+     csv
+     IGNOREHEADER AS 1;")
+
+DBI::dbExecute(rs, statement = rs_copy_query)
 
 # I didn't do a good job preparing this data at all and there may be some untidy column names and data. 
 # Let's start by cleaning it up with {janitor} and some case_whens 
@@ -60,13 +73,13 @@ survey_raw <- aws.s3::s3read_using(readr::read_csv,
 survey_clean <- survey_raw %>% 
   rename_with(str_to_lower) %>% 
   janitor::clean_names() %>% 
-  na.omit() #%>% 
-  # filter(! is.na(species)) %>% 
-  # mutate(sex = case_when(is.na(sex) ~ "unknown",
-  #                        TRUE       ~ sex)) %>% 
-  # mutate(bill_length_cat = case_when(bill_length_mm > 50 ~ "Long", 
-  #                                    bill_length_mm > 40 ~ "Medium", 
-  #                                    TRUE                ~ "Short"))
+  #na.omit() %>% 
+  filter(! is.na(species)) %>%
+  mutate(sex = case_when(is.na(sex) ~ "unknown",
+                         TRUE       ~ sex)) %>%
+  mutate(bill_length_cat = case_when(bill_length_mm > 50 ~ "Long",
+                                     bill_length_mm > 40 ~ "Medium",
+                                     TRUE                ~ "Short"))
 
 # Glimpse is incredibly useful and can be used on arrow and dbplyr objects too!
 glimpse(survey_clean)
@@ -74,6 +87,7 @@ glimpse(survey_clean)
 # Tabyl is the easiest eda function around
 survey_clean %>% 
   janitor::tabyl(year)
+
 
 
 survey_summary <- survey_clean %>% 
@@ -86,7 +100,7 @@ survey_summary <- survey_clean %>%
 survey_summary %>% 
   select(-species) %>% 
   kableExtra::kbl(co.names = c("Species", "Island", "Sex", "Bill length", "Bill Depth", "Flipper Length")) %>% 
-  kable_classic_2()
+  kable_paper()
 
 
 index <- survey_summary %>% 
@@ -96,15 +110,16 @@ index <- survey_summary %>%
 
 
 survey_summary %>% 
+  ungroup() %>% 
   select(-species) %>% 
   arrange(desc(bill_length)) %>% 
-  kableExtra::kbl(co.names = c("Island", "Sex", "Bill length", "Bill Depth", "Flipper Length")) %>% 
-  kable_classic_2() %>% 
+  kableExtra::kbl(col.names = c("Island", "Sex", "Bill length", "Bill Depth", "Flipper Length")) %>% 
+  kable_paper() %>% 
   group_rows(group_label = "Species", index = index) %>% 
   row_spec(0, bold = TRUE) %>% 
   column_spec(4, background = spec_color(survey_summary$bill_length, end = 0.7), color = "white", bold = TRUE) %>% 
-  add_header_above(c("Groupings" = 3, "Average Feature Values" = 3)) %>% 
-  add_header_above(c("Palmer's Penguins" = 6), bold = TRUE) %>% 
+  add_header_above(c("Groupings" = 2, "Average Feature Values" = 3)) %>% 
+  add_header_above(c("Palmer's Penguins" = 5), bold = TRUE) %>% 
   footnote(general = "Values in MM")
   
 # For more on kableExtra: https://haozhu233.github.io/kableExtra/awesome_table_in_pdf.pdf
