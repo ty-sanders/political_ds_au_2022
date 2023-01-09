@@ -1,1 +1,4 @@
-2+2
+print("Hello World")
+
+
+print(Sys.getenv("message"))
